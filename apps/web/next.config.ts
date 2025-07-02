@@ -1,20 +1,29 @@
-require("dotenv").config({ path: "../../.env" });
-const englishTranslation = require("./public/static/locales/en/common.json");
-const { withAxiom } = require("next-axiom");
-const { version } = require("./package.json");
-const {
-  i18n: { locales },
-} = require("./next-i18next.config");
-const {
+import bundleAnalyzer from "@next/bundle-analyzer";
+import * as dotenv from "dotenv";
+import { withAxiom } from "next-axiom";
+import path from "path";
+
+import { i18n } from "./next-i18next.config";
+import { version } from "./package.json";
+import {
   nextJsOrgRewriteConfig,
   orgUserRoutePath,
   orgUserTypeRoutePath,
   orgUserTypeEmbedRoutePath,
-} = require("./pagesAndRewritePaths");
+} from "./pagesAndRewritePaths";
+import englishTranslation from "./public/static/locales/en/common.json";
+
+dotenv.config({
+  path: path.resolve(__dirname, "../..", ".env"),
+});
+
+const { locales } = i18n;
+
 if (!process.env.NEXTAUTH_SECRET) throw new Error("Please set NEXTAUTH_SECRET");
 if (!process.env.CALENDSO_ENCRYPTION_KEY) throw new Error("Please set CALENDSO_ENCRYPTION_KEY");
 const isOrganizationsEnabled =
   process.env.ORGANIZATIONS_ENABLED === "1" || process.env.ORGANIZATIONS_ENABLED === "true";
+
 // To be able to use the version in the app without having to import package.json
 process.env.NEXT_PUBLIC_CALCOM_VERSION = version;
 
@@ -105,8 +114,8 @@ const informAboutDuplicateTranslations = () => {
 informAboutDuplicateTranslations();
 const plugins = [];
 if (process.env.ANALYZE === "true") {
-  // only load dependency if env `ANALYZE` was set
-  const withBundleAnalyzer = require("@next/bundle-analyzer")({
+  // only load dependency if env ANALYZE was set
+  const withBundleAnalyzer = bundleAnalyzer({
     enabled: true,
   });
   plugins.push(withBundleAnalyzer);
@@ -183,6 +192,19 @@ const nextConfig = {
   experimental: {
     // externalize server-side node_modules with size > 1mb, to improve dev mode performance/RAM usage
     optimizePackageImports: ["@calcom/ui"],
+    turbo: {
+      // Monorepo root so Turbopack can see your shared packages:
+      root: path.resolve(__dirname, "../.."),
+      // bump its own memory limit (bytes):
+      memoryLimit: 6 * 1024 ** 3,
+      // any other supported keys:
+      resolveAlias: {
+        /* … */
+      },
+      resolveExtensions: [
+        /* … */
+      ],
+    },
   },
   productionBrowserSourceMaps: true,
   /* We already do type check on GH actions */
@@ -256,7 +278,7 @@ const nextConfig = {
     const { orgSlug } = nextJsOrgRewriteConfig;
     const beforeFiles = [
       {
-        // This should be the first item in `beforeFiles` to take precedence over other rewrites
+        // This should be the first item in beforeFiles to take precedence over other rewrites
         source: `/(${locales.join("|")})/:path*`,
         destination: "/:path*",
       },
@@ -330,7 +352,7 @@ const nextConfig = {
         : []),
     ].filter(Boolean);
 
-    let afterFiles = [
+    const afterFiles = [
       {
         source: "/org/:slug",
         destination: "/team/:slug",
@@ -676,5 +698,7 @@ const nextConfig = {
     return redirects;
   },
 };
-
-module.exports = () => plugins.reduce((acc, next) => next(acc), nextConfig);
+//module.exports = () => plugins.reduce((acc, next) => next(acc), nextConfig);
+// Compose plugin HOCs and export
+const config = plugins.reduce((cfg, fn) => fn(cfg), nextConfig);
+export default config;
